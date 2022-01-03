@@ -1,0 +1,527 @@
+---
+title: "Pràctica 2 - Neteja i validació de dades"
+author: "Jordi Puig Benages"
+date: "`r format(Sys.Date(),'%e de %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_libraries, include=FALSE}
+library(knitr)
+library(dplyr)
+library(tidyverse)
+library(stringr)
+library(kableExtra)
+library(ggplot2)
+library(MASS)
+library(ResourceSelection)
+library(pROC)
+library(nortest)
+library(stats)
+library(agricolae)
+library(sjstats)
+library(readxl)
+```
+
+## 1 - Conceptes prèvis
+
+## 1.1 - Presentació
+
+En aquesta pràctica s'elabora un cas pràctica orientat a aprendre a identificar les dades rellevants per un projecte analític i usar les eines d’integració, neteja, validació i anàlisi de les mateixes.
+
+## 1.2 - Competències
+
+En aquesta pràctica es desenvolupen les següents competències del Màster de Data Science:
+
+ - Capacitat d'analitzar un problema en el nivell d'abstracció adequat a cada situació i
+   aplicar les habilitats i coneixements adquirits per abordar-lo i resoldre'l.
+ - Capacitat per aplicar les tècniques específiques de tractament de dades (integració,
+   transformació, neteja i validació) per al seu posterior anàlisi.
+
+## 1.3 - Objectius
+
+Els objectius concrets d’aquesta pràctica són:
+
+ - Aprendre a aplicar els coneixements adquirits i la seva capacitat de resolució de problemes en entorns nous o poc      coneguts dintre de contextos més amplis o multidisciplinaris.
+ - Saber identificar les dades rellevants i els tractaments necessaris (integració, neteja i validació) per dur a terme    un projecte analític.
+ - Aprendre a analitzar les dades adequadament per abordar la informació continguda en les dades.
+ - Identificar la millor representació dels resultats per tal d’aportar conclusions sobre el problema plantejat en el     procés analític.
+ - Actuar amb els principis ètics i legals relacionats amb la manipulació de dades en funció de l'àmbit d'aplicació.
+ - Desenvolupar les habilitats d'aprenentatge que els permetin continuar estudiant d'una manera que haurà de ser en       gran manera autodirigida o autònoma.
+ - Desenvolupar la capacitat de cerca, gestió i ús d'informació i recursos en l'àmbit de la ciència de dades.
+ 
+ 
+## 2 - Resolució
+
+## 2.1 - Descripció del dataset
+
+En aquesta pràctica s'elabora un projecte de tractament i anàlisi de dades a partir d'un dataset generat amb la informació disponible a https://fbref.com/en/comps/
+
+El conjunt de dades shooting_stats_big5_leagues_21_22 conté informació d'una mostra de tots els jugadors que han participat en partits oficials de les 5 lligues europees de futbol més importants: la lliga espanyola, la lliga anglesa, la lliga francesa, l'alemanya i la italiana. En el conjunt de dades es recullen mètriques relacionades amb els tirs.
+
+Els camps que trobem al dataset són els següents:
+
+ - Rk: identificador del jugador
+ - Player: nom del jugador i identificador únic de la web de fbref.com
+ - Nation: nacionalitat del jugador, primer en minúscules amb2/3 caràcters i després normalitzat en majúscules i 3 caràcters.
+ - Pos: Posició del jugador, pot ser una o dues concatenades entre GK, DF, MF i FW
+ - Competition: competició a la que juga entre les 5 principals europees
+ - Squad: equip en el que juga
+ - Age: edat, en format anys i dies
+ - Born: any de naixement
+ - noventas: número de blocs de 90 minuts jugats, fet servir per normalitzar després algunes mètriques per 90 minuts.
+ - Gls: número de gols marcats
+ - Sh: número de tirs
+ - SoT: número de tirs a porteria
+ - SoT%: percentatge de tirs a porteria
+ - Sh/90: tirs per 90 minuts
+ - SoT/90: tirs a porteria per 90 minuts
+ - G/Sh: gols per tir
+ - G/SoT: gols per tir a porteria
+ - Dist: distancia total dels tirs
+ - FK: tirs de falta
+ - PK: gols de penalti
+ - PKatt: tirs de penalti intentats
+ - xG: gols esperats
+ - npxG: gols esperats sense tenir en compte penaltis
+ - npxG/Sh: gols esperats per tir sense tenir en compte penaltis
+ - G-xG: diferència entre gols i gols esperats
+ - np:G-xG: diferència entre gols i gols esperats sense tenir en compte penaltis
+
+## 2.2 - Integració i selecció de les dades d'interès a analitzar
+
+- Es llegeix el fitxer shooting_stats_big5_leagues_21_22 i es guarden les dades a l'objecte shooting.
+- Es verifica que les dades s'han carregat correctament.
+- S'avalua que no hi hagi jugadors duplicats, en cas que fos així s'escolliria el registre amb més dades.
+- Es fa un preprocessament d'alguns camps, eliminant de Player el codi a partir del caràcter '\', 
+- S'agafa només els 3 últims caràcters de la nacionalitat.
+- Respecte la posició, es genera un camp amb posició principal, amb els dos primers caràcters del camp Pos, i posició    alternativa amb els altres caracters si existeixen.
+- En quant a l'edat, s'agafa només els anys, descartant els dies (que són els caràcters a partir del guió '-')
+
+- Un cop realitzats els canvis, l'objectiu és analitzar si hi ha alguna diferència important entre les grans competicions europees en termes de finalització. En una temporada en la que es parla molt de la baixada de nivell de la competició espanyola, es poden demostrar aquestes impressions amb dades? És cert que la Premier League té els millors davanters del mon?
+
+
+```{r chunk1}
+
+shooting <- read_excel("shooting_stats_big5_leagues_21_22.xlsx") ##Lectura de l'arxiu Excel
+head (shooting, 10) ##Es mostren els primers 10 registres de l'arxiu d'entrada
+tail(shooting, 10) ##Es mostren els darrers 10 registres de l'arxiu d'entrada
+summary(shooting) ##S'extreu un primer anàlisi estadístic amb les característiques bàsiques del dataset
+
+#S'analitza els casos duplicats del camp Rk i es comprova que siguin 0
+idx <- table(shooting$Rk)>1
+count <- sum(idx)
+
+#S'analitza els casos duplicats del camp Player i es comprova que siguin 0
+noms_duplicats <- table(shooting$Player)>1
+count2 <- sum(noms_duplicats)
+
+#Es modifiquen alguns camps, extreient el codi del nom del player, eliminant els dies del camp edat, agafant el camp nacionalitat amb només 3 caràcters en majúsucles, i afegint la posició principal i la secundària del camp pos.
+shooting$Player <- str_sub(shooting$Player,1,nchar(shooting$Player)-9)
+shooting$Age <- sapply(strsplit(as.character(shooting$Age),"-"), "[",1)
+shooting$Nation <- sapply(strsplit(as.character(shooting$Nation)," "), "[",2)
+shooting$Pos_main <- substr(shooting$Pos,1,2)
+shooting$Pos_secondary <- substring(shooting$Pos, 3)
+
+#Es mostren els primers 10 registres del dataset modificat
+head(shooting,10)
+
+```
+
+## 2.3 - Neteja de les dades
+
+En aquest apartat s'analitzen els camps per comprovar com tractar els valors buits i/o nuls, que en aquest cas, en ser en camps que són conseqüència dels tirs, que són 0 en tots els casos, es decideix per omplir amb valors 0. 
+
+Seguidament s'analitza el tipus de dades dels camps, passant a numèric alguns dels camps que quedaven com a character de forma errònia (age i xG).
+
+Per últim, es comprova que el rang de tots els valors dels camps està dins de l'acceptable i que no hi ha valors extrems que no siguin vàlids.
+
+L'únic matís que es durà a terme més endavant serà filtrar aquells jugadors que no han arribat a 540 minuts (noventas >=6) en el transcurs de la temporada, doncs no seria del tot fiable tenir en compte tots els registres tot i que no hagin participat un mínim de partits.
+
+```{r chunk2}
+
+rk_na <- sum(is.na(shooting$Rk)) ##No hi ha buits ni nuls
+player_na <- sum(is.na(shooting$Player)) ##No hi ha buits ni nuls
+nation_na <- sum(is.na(shooting$Nation)) ##No hi ha buits ni nuls
+pos_main_na <- sum(is.na(shooting$Pos_main)) ##No hi ha buits ni nuls
+pos_sec_na <- sum(is.na(shooting$Pos_secondary)) ##No hi ha buits ni nuls
+comp_na <- sum(is.na(shooting$Competition)) ##No hi ha buits ni nuls
+squad_na <- sum(is.na(shooting$Squad)) ##No hi ha buits ni nuls
+age_na <- sum(is.na(shooting$Age)) ##No hi ha buits ni nuls
+born_na <- sum(is.na(shooting$Born)) ##No hi ha buits ni nuls
+goals_na <- sum(is.na(shooting$Gls)) ##No hi ha buits ni nuls
+sh_na <- sum(is.na(shooting$Sh)) ##No hi ha buits ni nuls
+sot_na <- sum(is.na(shooting$SoT)) ##No hi ha buits ni nuls
+dist_na <- sum(is.na(shooting$Dist)) ## Hi ha 453 registres buits, es decideix substituir a 0 ja que són registres on tir =0
+shooting$Dist [is.na(shooting$Dist)] <- 0
+
+fk_na <- sum(is.na(shooting$FK)) ##1 registre buit, es passa a 0 doncs no té registres de tirs.
+shooting$FK [is.na(shooting$FK)] <- 0
+
+pk_na <- sum(is.na(shooting$PK))
+pkatt_na <- sum(is.na(shooting$PKatt))
+
+xg_na <- sum(is.na(shooting$xG)) ##1 registre buit, es passa a 0 doncs no té registres de tirs.
+shooting$xG [is.na(shooting$xG)] <- 0
+
+#Comprovació del data type d'alguns camps
+
+class(shooting$Gls)
+class(shooting$Sh)
+class(shooting$SoT)
+class(shooting$Dist)
+shooting$Dist <- as.numeric(shooting$Dist)
+
+class(shooting$Age)
+shooting$Age <- as.numeric(shooting$Age)
+class(shooting$Age)
+class(shooting$xG)
+shooting$xG <- as.numeric(shooting$xG)
+class(shooting$npxG_Sh)
+shooting$npxG_Sh <- as.numeric(shooting$npxG_Sh)
+class(shooting$G_Sh)
+shooting$G_Sh <- as.numeric(shooting$G_Sh)
+
+class(shooting$noventas)
+shooting$noventas <- as.numeric(shooting$noventas)
+
+class(shooting$G_xG)
+shooting$G_xG <- as.numeric(shooting$G_xG)
+
+class(shooting$npxG)
+shooting$npxG <- as.numeric(shooting$npxG)
+
+write.csv(shooting, "shooting_clean.csv", row.names=FALSE)
+
+
+#Valors atípics amb boxplot: si no s'aplica cap segmentació és impossible analitzar els resultat, doncs lògicament els porters o els defenses hauran realitzat molts menys tirs que els davanters.
+
+boxplot(shooting$Gls)
+boxplot(shooting$Sh)
+boxplot(shooting$SoT)
+boxplot(shooting$Dist)
+boxplot(shooting$FK)
+boxplot(shooting$PK)
+boxplot(shooting$PKatt)
+boxplot(shooting$xG)
+
+#Es generen filtres per posició principal i s'analitzen els resultats. Tot i les diferències, no hi ha cap valor que s'estimi com a invàlid, doncs està dins del rang normal.
+
+#Analitzant els davanters, que tenen els valors més alts de tirs i gols.
+
+fwd <- filter(shooting, shooting$Pos_main=='FW' & shooting$noventas >=6)
+boxplot(fwd$Gls)
+boxplot(fwd$Sh)
+boxplot(fwd$SoT)
+boxplot(fwd$Dist)
+boxplot(fwd$FK)
+boxplot(fwd$PK)
+boxplot(fwd$PKatt)
+boxplot(fwd$xG)
+
+#Analitzant els centrecampistes
+
+mf <- filter(shooting, shooting$Pos_main=='MF' & shooting$noventas >=6)
+boxplot(mf$Gls)
+boxplot(mf$Sh)
+boxplot(mf$SoT)
+boxplot(mf$Dist)
+boxplot(mf$FK)
+boxplot(mf$PK)
+boxplot(mf$PKatt)
+boxplot(mf$xG)
+
+#Analitzant els defenses
+df <- filter(shooting, shooting$Pos_main=='DF' & shooting$noventas >=6)
+boxplot(df$Gls)
+boxplot(df$Sh)
+boxplot(df$SoT)
+boxplot(df$Dist)
+boxplot(df$FK)
+boxplot(df$PK)
+boxplot(df$PKatt)
+boxplot(df$xG)
+
+
+#Analitzant els porters, curiós trobar un porter que ha marcat gol.
+gk <- filter(shooting, shooting$Pos_main=='GK' & shooting$noventas >=6)
+boxplot(gk$Gls)
+boxplot(gk$Sh)
+boxplot(gk$SoT)
+boxplot(gk$Dist)
+boxplot(gk$FK)
+boxplot(gk$PK)
+boxplot(gk$PKatt)
+boxplot(gk$xG)
+
+
+
+```
+
+## 2.4 - Anàlisi de les dades
+
+En aquest punt es creen els subdatasets d'estudi, que en aquest cas seran les mostres de davanters de cada competició, doncs com és un anàlisi centrat en la finalització a porteria, els que tindran més informació seran els davanters.
+
+En particular, les mètriques que es consideren més interessant per realitzar les comparacions són: número de gols, número de gols esperats (amb i sense incloure els penaltis), número de tirs i les mètriques calculades a partir d'aquestes, G-xG, xG_Sh i npxG_Sh.
+
+Es comprova s hi ha normalitat amb el test de Lilliefors, que demostra que no tenim normalitat en moltes de les mètriques, que és lògic pensant en que es tracta de mètriques que tindran moltes més repeticions de valors baixos que no d'alts.
+Es comprova també si hi ha igualtat de variàncies amb el test de Bartlett, que en el nostre cas és que sí.
+
+Per a realitzar el test d'hipòtesis sobre les mitjanes s'escull la mètrica G-xG, que si que té normalitat en totes les mostres.
+
+A més a més, es realitza un model lineal de variables quantitatives. El model lineal generat entre la variable npxG/Sh i la distància demostra no ser significatiu, com tampoc ho és amb la variable Sh.
+
+Per altra banda, s'analitza si hi ha correlació entre parelles de mètriques, obtenint els valors de correlació mostrar, r, més alts en parelles de mètriques bastant intuitives. Per exemple, hi ha alta correlació entre el número de tirs i el número de gols esperats i gols realitzats, com és lògic.
+
+Per últim també es genera un model de regressió múltiple amb valors quantitatius i qualitatius, intentant analitzar si la competició, la posició o l'edat dels jugadors és un element important a l'hora de predir el resultat de la mètrica npxG/Sh, i resulta en què la posició dels jugadors que són centrecampistes i davanters és important, així com la distància, el número de tirs i el número de xG esperats. No obstant, el valor de Rsquared és baix, amb la qual cosa el model no s'ajusta del tot bé i s'hauria de millorar.
+
+Es mostren els dos gràfics, valors ajustats enfront dels residus i el gràfic quantil-quantil que compara els residus del model amb els valors d'una variable que es distribueix normalment.
+
+S'observa com hi ha molts residus que es concentren entre els valors 5 i -5, però també existeix una quantitat considerable d'outliers.
+
+També es veu que quan els valors ajustats es disparen, també s'incrementa el valor dels residus.
+
+Amb el gràfic QQ es veu com la part central s'ajusta perfectament a la recta però els extrems es separen molt, el què vol dir que hi ha més valors extrems dels esperats si la distribució fos realment Normal.
+ 
+  
+```{r chunk3}
+
+##Creació dels subsets de dades per cada competició
+fwd_laliga <- filter(fwd, fwd$Competition=='La Liga')
+fwd_seriea <- filter(fwd, fwd$Competition=='Serie A')
+fwd_ligue1 <- filter(fwd, fwd$Competition=='Ligue 1')
+fwd_premier <- filter(fwd, fwd$Competition=='Premier League')
+fwd_bundesliga <- filter(fwd, fwd$Competition=='Bundesliga')
+
+
+
+##Anàlisi de normalitat de les mètriques: s'observa com no hi ha normalitat
+#Gls
+lillie.test(fwd$Gls)
+lillie.test(fwd_laliga$Gls)
+lillie.test(fwd_ligue1$Gls)
+lillie.test(fwd_premier$Gls)
+lillie.test(fwd_seriea$Gls)
+lillie.test(fwd_bundesliga$Gls)
+#xG
+lillie.test(fwd$xG)
+lillie.test(fwd_laliga$xG)
+lillie.test(fwd_ligue1$xG)
+lillie.test(fwd_premier$xG)
+lillie.test(fwd_seriea$xG)
+lillie.test(fwd_bundesliga$xG)
+#npxG
+lillie.test(fwd$npxG)
+lillie.test(fwd_laliga$npxG)
+lillie.test(fwd_ligue1$npxG)
+lillie.test(fwd_premier$npxG)
+lillie.test(fwd_seriea$npxG)
+lillie.test(fwd_bundesliga$npxG)
+#Sh
+lillie.test(fwd$Sh)
+lillie.test(fwd_laliga$Sh)
+lillie.test(fwd_ligue1$Sh)
+lillie.test(fwd_premier$Sh)
+lillie.test(fwd_seriea$Sh)
+lillie.test(fwd_bundesliga$Sh)
+#G-xG
+lillie.test(fwd$G_xG)
+lillie.test(fwd_laliga$G_xG) ##Normal
+lillie.test(fwd_ligue1$G_xG) ##Normal
+lillie.test(fwd_premier$G_xG) ##Normal
+lillie.test(fwd_seriea$G_xG) ##Normal
+lillie.test(fwd_bundesliga$G_xG) ##Normal
+#npxG_Sh
+lillie.test(fwd$npxG_Sh) 
+lillie.test(fwd_laliga$npxG_Sh) ##Normal
+lillie.test(fwd_ligue1$npxG_Sh) ##Normal
+lillie.test(fwd_premier$npxG_Sh) 
+lillie.test(fwd_seriea$npxG_Sh) ##Normal
+lillie.test(fwd_bundesliga$npxG_Sh) ##Normal
+
+
+##Anàlisi de igualtat de variàncies per diferents mètriques
+bartlett.test(Gls ~ Competition , data = fwd )
+bartlett.test(xG ~ Competition , data = fwd )
+bartlett.test(Sh ~ Competition , data = fwd )
+bartlett.test(npxG ~ Competition , data = fwd )
+bartlett.test(npxG_Sh ~ Competition , data = fwd )
+bartlett.test(G_xG ~ Competition , data = fwd )
+
+
+##Generació d'un model de regressió lineal amb variables quantitatives
+fwd_datos <- data.frame (fwd$npxG_Sh, fwd$Dist)
+fwd_datos2 <- data.frame(fwd$npxG_Sh, fwd$Sh)
+
+
+modelo_lineal <- lm (fwd.npxG_Sh ~ fwd.Dist, data= fwd_datos)
+summary(modelo_lineal)
+modelo_lineal2 <- lm (fwd.npxG_Sh ~ fwd.Sh, data= fwd_datos2)
+summary(modelo_lineal2)
+
+
+
+##Anàlisi de correlació entre diferents mètriques
+cor.test(fwd$xG,fwd$Dist)
+cor.test(fwd$Sh,fwd$Gls)
+cor.test(fwd$xG, fwd$Sh)
+cor.test(fwd$Gls, fwd$Sh)
+cor.test(fwd$Sh,fwd$G_Sh)
+cor.test(fwd$G_xG, fwd$Sh)
+cor.test(fwd$npxG_Sh,fwd$Dist)
+cor.test(fwd$G_xG,fwd$Dist)
+cor.test(fwd$npxG_Sh,fwd$G_xG)
+cor.test(fwd$Gls,fwd$npxG_Sh)
+
+##Generació d'un model de regressió múltiple amb variables quantitatives i qualitatives
+modelo_multiple <- lm(npxG_Sh ~ Competition + Age + Pos_main + Sh + Dist + xG, data = shooting)
+summary(modelo_multiple)
+exp(coefficients((modelo_multiple)))
+residus <- rstandard(modelo_multiple)
+valor_ajustados <- fitted (modelo_multiple)
+plot(residus, valor_ajustados)
+qqnorm(residus)
+
+##Test d'igualtat de variàncies per parelles
+var.test(fwd_laliga$G_xG, fwd_premier$G_xG) #El test no troba diferències significatives a les variàncies
+var.test(fwd_seriea$G_xG, fwd_premier$G_xG) #El test no troba diferències significatives a les variàncies
+var.test(fwd_ligue1$G_xG, fwd_premier$G_xG) #El test no troba diferències significatives a les variàncies
+var.test(fwd_bundesliga$G_xG, fwd_premier$G_xG) #El test no troba diferències significatives a les variàncies
+
+##Test d'hipòtesi sobre les mitjanes, amb mètriques i mostres que compleixen normalitat i homocedasticitat
+
+t.test(fwd_laliga$G_xG,fwd_premier$G_xG, conf.level=0.95) #s'obté un valor inferior a 0.05, per tant s'accepta la hipòtesi nul·la, es pot concloure amb un 95% de nivell de confiança que la mitjana d'efectivitat G-xG és la mateixa a la Lliga Espanyola que a la Premier.
+
+t.test(fwd_laliga$G_xG,fwd_seriea$G_xG, conf.level=0.95) #s'obté un valor superior a 0.05, per tant es rebutja la hipòtesi nul·la, es pot concloure amb un 95% de nivell de confiança que la mitjana d'efectivitat G-xG és diferent a la Lliga Espanyola que a la Serie A.
+
+t.test(fwd_laliga$G_xG,fwd_bundesliga$G_xG, conf.level=0.95) #s'obté un valor superior a 0.05, per tant es rebutja la hipòtesi nul·la, es pot concloure amb un 95% de nivell de confiança que la mitjana d'efectivitat G-xG és diferent a la Lliga Espanyola que a la Bundesliga.
+
+t.test(fwd_laliga$G_xG,fwd_ligue1$G_xG, conf.level=0.95) #s'obté un valor superior a 0.05, per tant es rebutja la hipòtesi nul·la, es pot concloure amb un 95% de nivell de confiança que la mitjana d'efectivitat G-xG és diferent a la Lliga Espanyola que a la Bundesliga.
+
+
+```
+
+## 2.5 - Representació gràfica
+
+Es mostra una comparació amb boxplots sobre algunes de les mètriques analitzades anteriorment. Dels boxplots podem concloure que les grans diferències entre les finalitzacions de les 5 grans lligues són conseqüència més aviat de la qualitat dels tirs que no del rendiment d'ells. Per un costat, es veu com a la Ligue 1 i a la Premier league el valors dels gols és superior, però si s'analitza la mètrica G-xG, que calcularia l'efectivitat o rendiment, s'observa com està en valors similars.No obstant, a la Premier League els davanters generen més número de tirs i , sobretot, cada tir té un valor de xG més alt.Amb el boxplot de la distància, tenint en compte que la Premier League té més tirs, s'observa com la distància dels tirs és menor, i és això el que fa que els tirs tinguin un valor de xG més alt, doncs quan més a prop de porteria sigui el tir, generalment, més probable serà que acabi en gol.
+
+Amb els histogrames s'ajuda a observar aquestes tendències, especialment amb les diferències entre els G-xG, que es veuen millor que als boxplots, i les distàncies dels tirs i el npxG/Sh.
+
+
+```{r chunk4}
+
+boxplot(fwd$Gls ~ fwd$Competition,
+data=fwd,
+main="Gols dels davanters segons competició",
+xlab="Competició",
+ylab="Número de gols",
+col="blue",
+border="black"
+)
+
+boxplot(fwd$xG ~ fwd$Competition,
+data=fwd,
+main="Gols esperats dels davanters segons competició",
+xlab="Competició",
+ylab="Número de gols esperats",
+col="blue",
+border="black"
+)
+
+boxplot(fwd$Sh ~ fwd$Competition,
+data=fwd,
+main="Tirs dels davanters segons competició",
+xlab="Competició",
+ylab="Número de tirs totals",
+col="blue",
+border="black"
+)
+
+boxplot(fwd$G_xG ~ fwd$Competition,
+data=fwd,
+main="Diferència entre Gols i gols esperats (Rendiment) dels davanters segons competició",
+xlab="Competició",
+ylab="G - xG",
+col="blue",
+border="black"
+)
+
+boxplot(fwd$npxG_Sh ~ fwd$Competition,
+data=fwd,
+main="xG per tir excloent penaltis dels davanters segons competició",
+xlab="Competició",
+ylab="npxG - Sh",
+col="blue",
+border="black"
+)
+
+boxplot(fwd$Dist ~ fwd$Competition,
+data=fwd,
+main="Distància dels tirs dels davanters segons competició",
+xlab="Competició",
+ylab="npxG - Sh",
+col="blue",
+border="black"
+)
+
+
+hist(fwd_bundesliga$Gls, main='Gls', breaks=10)
+hist(fwd_laliga$Gls, main='Gls', breaks=10)
+hist(fwd_ligue1$Gls, main='Gls', breaks=10)
+hist(fwd_premier$Gls, main='Gls', breaks=10)
+hist(fwd_seriea$Gls, main='Gls', breaks=10)
+
+hist(fwd_bundesliga$xG, main='xG', breaks=10)
+hist(fwd_laliga$xG, main='xG', breaks=10)
+hist(fwd_ligue1$xG, main='xG', breaks=10)
+hist(fwd_premier$xG, main='xG', breaks=10)
+hist(fwd_seriea$xG, main='xG', breaks=10)
+
+
+hist(fwd_bundesliga$G_xG, main='G-xG', breaks=10)
+hist(fwd_laliga$G_xG, main='G-xG', breaks=10)
+hist(fwd_ligue1$G_xG, main='G-xG', breaks=10)
+hist(fwd_premier$G_xG, main='G-xG', breaks=10)
+hist(fwd_seriea$G_xG, main='G-xG', breaks=10)
+
+hist(fwd_bundesliga$Sh, main='Sh', breaks=10)
+hist(fwd_laliga$Sh, main='Sh', breaks=10)
+hist(fwd_ligue1$Sh, main='Sh', breaks=10)
+hist(fwd_premier$Sh, main='Sh', breaks=10)
+hist(fwd_seriea$Sh, main='Sh', breaks=10)
+
+
+hist(fwd_bundesliga$npxG_Sh, main='npxG_Sh', breaks=10)
+hist(fwd_laliga$npxG_Sh, main='npxG_Sh', breaks=10)
+hist(fwd_ligue1$npxG_Sh, main='npxG_Sh', breaks=10)
+hist(fwd_premier$npxG_Sh, main='npxG_Sh', breaks=10)
+hist(fwd_seriea$npxG_Sh, main='npxG_Sh', breaks=10)
+
+hist(fwd_bundesliga$Dist, main='Dist', breaks=10)
+hist(fwd_laliga$Dist, main='Dist', breaks=10)
+hist(fwd_ligue1$Dist, main='Dist', breaks=10)
+hist(fwd_premier$Dist, main='Dist', breaks=10)
+hist(fwd_seriea$Dist, main='Dist', breaks=10)
+
+```
+
+## 2.6 - Resolució del problema
+
+Tal com s'ha comentat als apartats anteriors, el projecte ha servit per analitzar en profunditat les mètriques de finalització dels davanters de les 5 grans lligues europees. Mitjançant un preprocessament d'un dataset, s'ha pogut obtenir un arxiu "clean" per a poder realitzar l'anàlisi posterior. Amb l'anàlisi, s'han mostrat les diferències més importants de la lliga espanyola amb les altres lligues, una disminució en la quantitat dels tirs, però sobretot en l'eficàcia i el nivell d'aquests tirs. Es tira en pitjors condicions (menor npxG/Sh) i es té menor qualitat (pitjor G-xG), fet que confirma els temors que hi ha que la lliga espanyola hagi perdut part del seu nivell amb la marxa d'alguns dels grans davanters en els darrers anys.
+
+Com a passos següents, es recomana incloure dades de temporades anteriors per poder fer una evolució històrica i saber si la tendència és només d'aquest any o ja es porta alguna temporada, a més de comprovar si en temproades passades era la lliga espanyola la que tenia els millors davanters.
+
+## Contribucions
+
+Aquesta pràctica ha estat realitzada de forma individual per l'estudiant Jordi Puig Benages. Així doncs, tant la investigació prèvia, com la redaacció de les respostes i el desenvolupament del codi ha estat realitzat per aquest mateix estudiant.
+
+
