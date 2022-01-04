@@ -7,3 +7,4 @@ Els fitxers inclosos són:
 - shooting_clean: arxiu en format csv resultat del preprocessament de l'arxiu anterior, amb canvis en alguns camps, assignació correcta de formats, entre d'altres.
 - 20211_PRA2_PuigBenagesJordi: arxiu en format RMD, amb el codi realitzat a RStudio per desenvolupar tota la pràctica.
 - 20211_PRA2_PuigBenagesJordi: arxiu en format html, amb el mateix codi que l'anterior arxiu però amb el resultat gràfic incloent totes les gràfiques, separació del codi i resultats, etc.
+- 20211_PRA2_PuigBenagesJordi: arxiu en format pdf, exactament igual que l'arxiu html però en diferent format per si hi hagués cap problema.
